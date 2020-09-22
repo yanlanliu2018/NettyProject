@@ -1,0 +1,6 @@
+HELP.md
+/target/
+logs/
+.idea
+*.iml
+/database/
