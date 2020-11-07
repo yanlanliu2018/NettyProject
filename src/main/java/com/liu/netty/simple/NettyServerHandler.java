@@ -8,6 +8,8 @@ import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.ChannelPipeline;
 import io.netty.util.CharsetUtil;
 
+import java.util.concurrent.TimeUnit;
+
 /*
 说明：
 1. 我们自定义一个 Handler 需要继承 netty 规定好的某个 HandlerAdapter （规范）
@@ -26,16 +28,49 @@ public class NettyServerHandler extends ChannelInboundHandlerAdapter {
 
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
-        System.out.println("服务器读取线程："+Thread.currentThread().getName());
-        System.out.println("server ctx ="+ctx);
-        System.out.println("看看channel 和 pipeline 的关系");
-        Channel channel = ctx.channel();
-        ChannelPipeline pipeline = ctx.pipeline();  //本质是一个双向链表，出栈入栈
-        //将 msg 转成一个 ByteBuf
-        //ByteBuf 是Netty 提供的，不是 NIO 的ByteBuffer。
-        ByteBuf buf = (ByteBuf) msg;
-        System.out.println("客户端发送的消息是："+buf.toString(CharsetUtil.UTF_8));
-        System.out.println("客户端地址："+ctx.channel().remoteAddress());
+
+        //比如这里我们有一个耗时非常长的业务——》异步执行 ——》提交给该 channel 对应的
+        //NioEventLoop 的 taskQueue 中
+
+        //解决方案1     用户程序自定义的普通任务
+        //如果在这里有两个该类型的任务，是公用同一个线程来执行的，会依次执行
+        ctx.channel().eventLoop().execute(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    Thread.sleep(1000*10);
+                    ctx.writeAndFlush(Unpooled.copiedBuffer("hello,客户端~2",CharsetUtil.UTF_8));
+                }catch (Exception e){
+                    System.out.println("发生异常："+e.getMessage());
+                }
+            }
+        });
+
+        //解决方案2     用户自定义定时任务 ——》该任务提交到 scheduleTaskQueue
+        ctx.channel().eventLoop().schedule(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    Thread.sleep(1000*10);
+                    ctx.writeAndFlush(Unpooled.copiedBuffer("hello,客户端~2",CharsetUtil.UTF_8));
+                }catch (Exception e){
+                    System.out.println("发生异常："+e.getMessage());
+                }
+            }
+        },5, TimeUnit.SECONDS);
+
+        System.out.println("go on ...");
+
+//        System.out.println("服务器读取线程："+Thread.currentThread().getName());
+//        System.out.println("server ctx ="+ctx);
+//        System.out.println("看看channel 和 pipeline 的关系");
+//        Channel channel = ctx.channel();
+//        ChannelPipeline pipeline = ctx.pipeline();  //本质是一个双向链表，出栈入栈
+//        //将 msg 转成一个 ByteBuf
+//        //ByteBuf 是Netty 提供的，不是 NIO 的ByteBuffer。
+//        ByteBuf buf = (ByteBuf) msg;
+//        System.out.println("客户端发送的消息是："+buf.toString(CharsetUtil.UTF_8));
+//        System.out.println("客户端地址："+ctx.channel().remoteAddress());
     }
 
     //数据读取完毕
